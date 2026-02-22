@@ -360,6 +360,64 @@ const WargaList = ({ role, onUpdate }: { role: string, onUpdate: () => void }) =
     }
   };
 
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(warga.map(w => ({
+      Nama: w.nama,
+      NIK: w.nik,
+      Alamat: w.alamat,
+      Telepon: w.telepon,
+      Status: w.status
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data Warga");
+    XLSX.writeFile(workbook, `Data_Warga_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Data Warga Merpati Lima", 14, 15);
+    (doc as any).autoTable({
+      startY: 20,
+      head: [['Nama', 'NIK', 'Alamat', 'Telepon', 'Status']],
+      body: warga.map(w => [w.nama, w.nik, w.alamat || '-', w.telepon || '-', w.status]),
+    });
+    doc.save(`Data_Warga_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+      if (confirm(`Impor ${data.length} data warga?`)) {
+        for (const row of data) {
+          await fetch('/api/warga', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nama: row.Nama || '',
+              nik: row.NIK || '',
+              alamat: row.Alamat || '',
+              telepon: row.Telepon || '',
+              status: row.Status || 'Tetap'
+            }),
+          });
+        }
+        fetchWarga();
+        onUpdate();
+        alert('Impor warga selesai!');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   const filteredWarga = warga.filter(w => 
     w.nama.toLowerCase().includes(search.toLowerCase()) || 
     w.nik.includes(search)
@@ -367,21 +425,31 @@ const WargaList = ({ role, onUpdate }: { role: string, onUpdate: () => void }) =
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full sm:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Cari nama atau NIK..."
-            className="w-full pl-12 pr-4 py-3 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-primary outline-none transition-all"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+          <div className="relative w-full sm:w-96">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Cari nama atau NIK..."
+              className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-primary outline-none transition-all"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex bg-white dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <button onClick={exportToExcel} className="p-2 text-slate-500 hover:text-emerald-600" title="Export Excel"><FileText size={18} /></button>
+            <button onClick={exportToPDF} className="p-2 text-slate-500 hover:text-rose-600" title="Export PDF"><Printer size={18} /></button>
+            <label className="p-2 text-slate-500 hover:text-amber-600 cursor-pointer" title="Import Excel/CSV">
+              <Upload size={18} />
+              <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleImport} />
+            </label>
+          </div>
         </div>
         {role === 'admin' && (
           <button 
             onClick={() => { setEditingWarga(null); setShowModal(true); }}
-            className="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
+            className="w-full sm:w-auto bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
           >
             <Plus size={20} /> Tambah Warga
           </button>
@@ -2052,6 +2120,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [darkMode, setDarkMode] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [settings, setSettings] = useState<AppSettings>({
     app_name: 'Merpati Lima',
     app_logo: '',
@@ -2068,6 +2137,11 @@ export default function App() {
     totalPengeluaran: 0,
     saldo: 0
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchSettings = async () => {
     const res = await fetch('/api/settings');
@@ -2228,6 +2302,15 @@ export default function App() {
                 {menuItems.find(m => m.id === activeTab)?.label}
               </h2>
               <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-white/70'}`}>Selamat datang kembali, {user.username}!</p>
+            </div>
+            
+            <div className="hidden md:flex flex-col items-end">
+              <div className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-white'}`}>
+                {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </div>
+              <div className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-slate-400' : 'text-white/60'}`}>
+                {currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </div>
             </div>
             
             {/* Mobile Menu Toggle (simplified) */}
