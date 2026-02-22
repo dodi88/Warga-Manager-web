@@ -25,15 +25,24 @@ import {
   Settings as SettingsIcon,
   Printer,
   Download,
+  Upload,
   Image as ImageIcon,
   CheckCircle2,
   Clock,
   MessageCircle,
   Calendar,
   Shield,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Moon,
+  Sun,
+  Database,
+  Info,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // --- Types ---
 interface User {
@@ -74,6 +83,10 @@ interface AppSettings {
   primary_color: string;
   invoice_header: string;
   invoice_footer: string;
+  marquee_text: string;
+  marquee_enabled: string;
+  dark_mode_default: string;
+  show_stats_to_user: string;
 }
 
 interface Tagihan {
@@ -206,36 +219,94 @@ const Login = ({ onLogin, settings }: { onLogin: (user: User) => void, settings:
   );
 };
 
-const Dashboard = ({ stats }: { stats: Stats }) => {
+const Dashboard = ({ stats, user, settings }: { stats: Stats, user: User, settings: AppSettings }) => {
+  const showStats = user.role === 'admin' || settings.show_stats_to_user === 'true';
+
   const cards = [
     { title: 'Total Warga', value: stats.totalWarga, icon: Users, color: 'bg-blue-500', text: 'Orang' },
-    { title: 'Pemasukan', value: stats.totalPemasukan, icon: TrendingUp, color: 'bg-emerald-500', text: 'IDR', isCurrency: true },
-    { title: 'Pengeluaran', value: stats.totalPengeluaran, icon: TrendingDown, color: 'bg-rose-500', text: 'IDR', isCurrency: true },
-    { title: 'Saldo Kas', value: stats.saldo, icon: Wallet, color: 'bg-primary', text: 'IDR', isCurrency: true },
+    { title: 'Pemasukan', value: stats.totalPemasukan, icon: TrendingUp, color: 'bg-emerald-500', text: 'IDR', isCurrency: true, adminOnly: true },
+    { title: 'Pengeluaran', value: stats.totalPengeluaran, icon: TrendingDown, color: 'bg-rose-500', text: 'IDR', isCurrency: true, adminOnly: true },
+    { title: 'Saldo Kas', value: stats.saldo, icon: Wallet, color: 'bg-primary', text: 'IDR', isCurrency: true, adminOnly: true },
   ];
 
+  const filteredCards = cards.filter(card => !card.adminOnly || showStats);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {cards.map((card, i) => (
-        <motion.div 
-          key={i}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.1 }}
-          className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className={`${card.color} w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 group-hover:scale-110 transition-transform`}>
-              <card.icon size={24} />
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-gradient-to-br from-primary to-primary-dark p-8 rounded-[2rem] text-white shadow-xl shadow-primary/20 relative overflow-hidden">
+          <div className="relative z-10">
+            <h3 className="text-2xl font-bold mb-2">Halo, {user.username}! 👋</h3>
+            <p className="text-white/80 max-w-md">Sistem pengelolaan warga Merpati Lima siap membantu Anda mengelola data dan keuangan dengan lebih mudah.</p>
+            <div className="mt-6 flex gap-3">
+              <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest">
+                Role: {user.role}
+              </div>
             </div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{card.text}</span>
           </div>
-          <h3 className="text-slate-500 text-sm font-medium mb-1">{card.title}</h3>
-          <p className="text-2xl font-bold text-slate-800">
-            {card.isCurrency ? `Rp ${card.value.toLocaleString('id-ID')}` : card.value}
+          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center text-amber-600">
+              <Bell size={24} />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-800 dark:text-white">Informasi Terkini</h4>
+              <p className="text-xs text-slate-400">Pengumuman terbaru</p>
+            </div>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-300 italic">
+            {settings.marquee_text || "Belum ada pengumuman terbaru saat ini."}
           </p>
-        </motion.div>
-      ))}
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {filteredCards.map((card, i) => (
+          <motion.div 
+            key={i}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className={`${card.color} w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 group-hover:scale-110 transition-transform`}>
+                <card.icon size={24} />
+              </div>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{card.text}</span>
+            </div>
+            <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-1">{card.title}</h3>
+            <p className="text-2xl font-bold text-slate-800 dark:text-white">
+              {card.isCurrency ? `Rp ${card.value.toLocaleString('id-ID')}` : card.value}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Quick Access / Status Ronda */}
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <Shield className="text-primary" />
+          <h4 className="font-bold text-slate-800 dark:text-white">Status Ronda Malam Ini</h4>
+        </div>
+        <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+            <Clock size={20} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800 dark:text-white">Jadwal Aktif</p>
+            <p className="text-xs text-slate-500">Silakan cek menu Ronda untuk detail petugas malam ini.</p>
+          </div>
+          <button className="ml-auto text-primary text-xs font-bold flex items-center gap-1 hover:underline">
+            Lihat Jadwal <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -522,22 +593,117 @@ const KeuanganList = ({ role, onUpdate }: { role: string, onUpdate: () => void }
     filter === 'Semua' || k.tipe === filter.toLowerCase()
   );
 
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(filteredData.map(k => ({
+      Tanggal: k.tanggal,
+      Tipe: k.tipe.toUpperCase(),
+      Kategori: k.kategori,
+      Jumlah: k.jumlah,
+      Keterangan: k.keterangan
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Keuangan");
+    XLSX.writeFile(workbook, `Laporan_Keuangan_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportToCSV = () => {
+    const worksheet = XLSX.utils.json_to_sheet(filteredData.map(k => ({
+      Tanggal: k.tanggal,
+      Tipe: k.tipe.toUpperCase(),
+      Kategori: k.kategori,
+      Jumlah: k.jumlah,
+      Keterangan: k.keterangan
+    })));
+    const csv = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `Laporan_Keuangan_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Laporan Keuangan Merpati Lima", 14, 15);
+    (doc as any).autoTable({
+      startY: 20,
+      head: [['Tanggal', 'Tipe', 'Kategori', 'Jumlah', 'Keterangan']],
+      body: filteredData.map(k => [
+        k.tanggal, 
+        k.tipe.toUpperCase(), 
+        k.kategori, 
+        `Rp ${k.jumlah.toLocaleString('id-ID')}`, 
+        k.keterangan
+      ]),
+    });
+    doc.save(`Laporan_Keuangan_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+      if (confirm(`Impor ${data.length} data transaksi?`)) {
+        for (const row of data) {
+          await fetch('/api/keuangan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tanggal: row.Tanggal || new Date().toISOString().split('T')[0],
+              tipe: (row.Tipe || 'pemasukan').toLowerCase(),
+              kategori: row.Kategori || 'Lain-lain',
+              jumlah: parseFloat(row.Jumlah) || 0,
+              keterangan: row.Keterangan || ''
+            }),
+          });
+        }
+        fetchKeuangan();
+        onUpdate();
+        alert('Impor selesai!');
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex bg-white p-1 rounded-2xl border border-slate-200">
-          {['Semua', 'Pemasukan', 'Pengeluaran'].map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
-                filter === f ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex bg-white dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            {['Semua', 'Pemasukan', 'Pengeluaran'].map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-4 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                  filter === f ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex bg-white dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <button onClick={exportToExcel} className="p-2 text-slate-500 hover:text-emerald-600" title="Export Excel"><FileText size={18} /></button>
+            <button onClick={exportToCSV} className="p-2 text-slate-500 hover:text-blue-600" title="Export CSV"><FileText size={18} /></button>
+            <button onClick={exportToPDF} className="p-2 text-slate-500 hover:text-rose-600" title="Export PDF"><Printer size={18} /></button>
+            <label className="p-2 text-slate-500 hover:text-amber-600 cursor-pointer" title="Import Excel/CSV">
+              <Upload size={18} />
+              <input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleImport} />
+            </label>
+          </div>
         </div>
+
         {role === 'admin' && (
           <div className="flex gap-3 w-full sm:w-auto">
             <button 
@@ -839,10 +1005,47 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
     window.open(`https://wa.me/?text=${encoded}`, '_blank');
   };
 
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(tagihan.map(t => ({
+      'No. Tagihan': t.nomor_tagihan,
+      Warga: t.nama_warga,
+      Alamat: t.alamat_warga,
+      Tanggal: t.tanggal,
+      Total: t.total,
+      Status: t.status
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Tagihan");
+    XLSX.writeFile(workbook, `Laporan_Tagihan_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Laporan Tagihan Merpati Lima", 14, 15);
+    (doc as any).autoTable({
+      startY: 20,
+      head: [['No. Tagihan', 'Warga', 'Tanggal', 'Total', 'Status']],
+      body: tagihan.map(t => [
+        t.nomor_tagihan,
+        t.nama_warga,
+        t.tanggal,
+        `Rp ${t.total.toLocaleString('id-ID')}`,
+        t.status
+      ]),
+    });
+    doc.save(`Laporan_Tagihan_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h3 className="text-xl font-bold text-slate-800">Manajemen Tagihan</h3>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <h3 className="text-xl font-bold text-slate-800">Manajemen Tagihan</h3>
+          <div className="flex bg-white dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <button onClick={exportToExcel} className="p-2 text-slate-500 hover:text-emerald-600" title="Export Excel"><FileText size={18} /></button>
+            <button onClick={exportToPDF} className="p-2 text-slate-500 hover:text-rose-600" title="Export PDF"><Printer size={18} /></button>
+          </div>
+        </div>
         {role === 'admin' && (
           <div className="flex gap-3 w-full sm:w-auto">
             <button 
@@ -1279,10 +1482,43 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
   );
 };
 
+const Marquee = ({ text, color }: { text: string, color: string }) => {
+  return (
+    <div className="bg-white dark:bg-slate-800 border-y border-slate-100 dark:border-slate-700 py-2 overflow-hidden whitespace-nowrap relative">
+      <div className="flex items-center gap-4 animate-marquee">
+        <div className="flex items-center gap-2 px-4">
+          <Bell size={14} className="text-primary" />
+          <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{text}</span>
+        </div>
+        <div className="flex items-center gap-2 px-4">
+          <Bell size={14} className="text-primary" />
+          <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{text}</span>
+        </div>
+        <div className="flex items-center gap-2 px-4">
+          <Bell size={14} className="text-primary" />
+          <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{text}</span>
+        </div>
+      </div>
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-33.33%); }
+        }
+        .animate-marquee {
+          display: inline-flex;
+          animation: marquee 30s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const Settings = ({ settings, onUpdate }: { settings: AppSettings, onUpdate: () => void }) => {
   const [formData, setFormData] = useState<AppSettings>(settings);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
 
   useEffect(() => {
     setFormData(settings);
@@ -1318,6 +1554,38 @@ const Settings = ({ settings, onUpdate }: { settings: AppSettings, onUpdate: () 
     }
   };
 
+  const handleBackup = async () => {
+    setBackupLoading(true);
+    try {
+      window.location.href = '/api/database/backup';
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm('PERINGATAN: Restore database akan menghapus data saat ini dan menggantinya dengan file backup. Aplikasi akan restart otomatis. Lanjutkan?')) return;
+
+    setRestoreLoading(true);
+    try {
+      const res = await fetch('/api/database/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: await file.arrayBuffer(),
+      });
+      if (res.ok) {
+        alert('Database berhasil di-restore. Aplikasi akan memuat ulang.');
+        window.location.reload();
+      } else {
+        alert('Gagal me-restore database.');
+      }
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
+
   const rgbToHex = (r: number, g: number, b: number) => {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   };
@@ -1331,201 +1599,234 @@ const Settings = ({ settings, onUpdate }: { settings: AppSettings, onUpdate: () 
     } : { r: 79, g: 70, b: 229 };
   };
 
-  const rgb = hexToRgb(formData.primary_color);
+  const rgb = hexToRgb(formData.primary_color || '#4f46e5');
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3">
-            <SettingsIcon className="text-primary" /> Pengaturan Aplikasi
+    <div className="max-w-5xl mx-auto space-y-8 pb-20">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+          <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+            <SettingsIcon className="text-primary" /> Pengaturan Sistem Lengkap
           </h3>
-          <p className="text-sm text-slate-500 mt-1">Kustomisasi identitas aplikasi dan format invoice Anda.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Kelola identitas, tampilan, dan keamanan database aplikasi Anda.</p>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Nama Aplikasi</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary transition-all"
-                  value={formData.app_name}
-                  onChange={(e) => setFormData({...formData, app_name: e.target.value})}
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Logo Aplikasi</label>
-                <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group relative">
-                    {formData.app_logo ? (
-                      <img src={formData.app_logo} alt="Logo Preview" className="w-full h-full object-contain" />
-                    ) : (
-                      <ImageIcon className="text-slate-300" size={32} />
-                    )}
-                    <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                      <Plus className="text-white" />
-                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
-                    </label>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Logo utama aplikasi.
-                    </p>
-                    {formData.app_logo && (
-                      <button 
-                        type="button" 
-                        onClick={() => setFormData({...formData, app_logo: ''})}
-                        className="text-rose-500 text-xs font-bold mt-2 hover:underline"
-                      >
-                        Hapus Logo
-                      </button>
-                    )}
-                  </div>
+        <form onSubmit={handleSubmit} className="p-8 space-y-10">
+          {/* Identitas Aplikasi */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
+              <Info size={14} /> Identitas & Branding
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Nama Aplikasi</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                    value={formData.app_name}
+                    onChange={(e) => setFormData({...formData, app_name: e.target.value})}
+                  />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Logo Gang (Khusus Invoice)</label>
-                <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group relative">
-                    {formData.gang_logo ? (
-                      <img src={formData.gang_logo} alt="Gang Logo Preview" className="w-full h-full object-contain" />
-                    ) : (
-                      <ImageIcon className="text-slate-300" size={32} />
-                    )}
-                    <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                      <Plus className="text-white" />
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setFormData({ ...formData, gang_logo: reader.result as string });
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }} 
-                      />
-                    </label>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Logo tambahan yang akan muncul di samping logo aplikasi pada invoice.
-                    </p>
-                    {formData.gang_logo && (
-                      <button 
-                        type="button" 
-                        onClick={() => setFormData({...formData, gang_logo: ''})}
-                        className="text-rose-500 text-xs font-bold mt-2 hover:underline"
-                      >
-                        Hapus Logo Gang
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-4">Warna Utama Aplikasi</label>
-                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                  <div className="flex flex-col gap-6">
-                    <div className="flex items-center gap-4">
-                      <div 
-                        className="w-16 h-16 rounded-2xl shadow-lg border-4 border-white"
-                        style={{ backgroundColor: formData.primary_color }}
-                      ></div>
-                      <div className="flex-1">
-                        <input 
-                          type="color" 
-                          className="w-full h-12 rounded-xl cursor-pointer border-none bg-transparent"
-                          value={formData.primary_color}
-                          onChange={(e) => setFormData({...formData, primary_color: e.target.value})}
-                        />
-                      </div>
+                
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Logo Aplikasi</label>
+                  <div className="flex items-center gap-6">
+                    <div className="w-24 h-24 rounded-2xl bg-slate-100 dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden group relative">
+                      {formData.app_logo ? (
+                        <img src={formData.app_logo} alt="Logo Preview" className="w-full h-full object-contain" />
+                      ) : (
+                        <ImageIcon className="text-slate-300" size={32} />
+                      )}
+                      <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                        <Plus className="text-white" />
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
+                      </label>
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase text-center block">R</label>
+                    <div className="flex-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Logo utama aplikasi.</p>
+                      {formData.app_logo && (
+                        <button type="button" onClick={() => setFormData({...formData, app_logo: ''})} className="text-rose-500 text-xs font-bold mt-2 hover:underline">Hapus Logo</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Logo Gang (Khusus Invoice)</label>
+                  <div className="flex items-center gap-6">
+                    <div className="w-24 h-24 rounded-2xl bg-slate-100 dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden group relative">
+                      {formData.gang_logo ? (
+                        <img src={formData.gang_logo} alt="Gang Logo Preview" className="w-full h-full object-contain" />
+                      ) : (
+                        <ImageIcon className="text-slate-300" size={32} />
+                      )}
+                      <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                        <Plus className="text-white" />
                         <input 
-                          type="number" min="0" max="255"
-                          className="w-full bg-white border border-slate-200 rounded-lg py-2 text-center font-bold text-sm"
-                          value={rgb.r}
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
                           onChange={(e) => {
-                            const val = Math.min(255, Math.max(0, parseInt(e.target.value) || 0));
-                            setFormData({...formData, primary_color: rgbToHex(val, rgb.g, rgb.b)});
-                          }}
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setFormData({ ...formData, gang_logo: reader.result as string });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }} 
                         />
+                      </label>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Logo tambahan pada invoice.</p>
+                      {formData.gang_logo && (
+                        <button type="button" onClick={() => setFormData({...formData, gang_logo: ''})} className="text-rose-500 text-xs font-bold mt-2 hover:underline">Hapus Logo Gang</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">Warna Utama Aplikasi</label>
+                  <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex flex-col gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl shadow-lg border-4 border-white" style={{ backgroundColor: formData.primary_color }}></div>
+                        <div className="flex-1">
+                          <input 
+                            type="color" 
+                            className="w-full h-12 rounded-xl cursor-pointer border-none bg-transparent"
+                            value={formData.primary_color}
+                            onChange={(e) => setFormData({...formData, primary_color: e.target.value})}
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase text-center block">G</label>
-                        <input 
-                          type="number" min="0" max="255"
-                          className="w-full bg-white border border-slate-200 rounded-lg py-2 text-center font-bold text-sm"
-                          value={rgb.g}
-                          onChange={(e) => {
-                            const val = Math.min(255, Math.max(0, parseInt(e.target.value) || 0));
-                            setFormData({...formData, primary_color: rgbToHex(rgb.r, val, rgb.b)});
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase text-center block">B</label>
-                        <input 
-                          type="number" min="0" max="255"
-                          className="w-full bg-white border border-slate-200 rounded-lg py-2 text-center font-bold text-sm"
-                          value={rgb.b}
-                          onChange={(e) => {
-                            const val = Math.min(255, Math.max(0, parseInt(e.target.value) || 0));
-                            setFormData({...formData, primary_color: rgbToHex(rgb.r, rgb.g, val)});
-                          }}
-                        />
+                      <div className="grid grid-cols-3 gap-3">
+                        {['r', 'g', 'b'].map(c => (
+                          <div key={c} className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase text-center block">{c.toUpperCase()}</label>
+                            <input 
+                              type="number" min="0" max="255"
+                              className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg py-2 text-center font-bold text-sm dark:text-white"
+                              value={rgb[c as keyof typeof rgb]}
+                              onChange={(e) => {
+                                const val = Math.min(255, Math.max(0, parseInt(e.target.value) || 0));
+                                const newRgb = { ...rgb, [c]: val };
+                                setFormData({...formData, primary_color: rgbToHex(newRgb.r, newRgb.g, newRgb.b)});
+                              }}
+                            />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+          </section>
 
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Header Invoice (Informasi Penting)</label>
-                <input 
-                  type="text" 
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary transition-all"
-                  value={formData.invoice_header}
-                  onChange={(e) => setFormData({...formData, invoice_header: e.target.value})}
-                />
+          {/* Pengaturan Informasi (Marquee) */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
+              <Bell size={14} /> Informasi & Pengumuman
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Aktifkan Teks Berjalan (Marquee)</label>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, marquee_enabled: formData.marquee_enabled === 'true' ? 'false' : 'true'})}
+                  className={`w-12 h-6 rounded-full transition-all relative ${formData.marquee_enabled === 'true' ? 'bg-primary' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.marquee_enabled === 'true' ? 'left-7' : 'left-1'}`} />
+                </button>
               </div>
-              
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Footer Invoice</label>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Isi Teks Informasi</label>
                 <textarea 
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary transition-all"
-                  rows={4}
-                  value={formData.invoice_footer}
-                  onChange={(e) => setFormData({...formData, invoice_footer: e.target.value})}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                  rows={2}
+                  value={formData.marquee_text}
+                  onChange={(e) => setFormData({...formData, marquee_text: e.target.value})}
+                  placeholder="Masukkan informasi yang akan ditampilkan..."
                 />
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+          {/* Pengaturan Tampilan & Akses */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
+              <Sun size={14} /> Tampilan & Akses
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Dark Mode Default</p>
+                  <p className="text-[10px] text-slate-500">Gunakan tema gelap saat pertama kali dibuka.</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, dark_mode_default: formData.dark_mode_default === 'true' ? 'false' : 'true'})}
+                  className={`w-12 h-6 rounded-full transition-all relative ${formData.dark_mode_default === 'true' ? 'bg-primary' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.dark_mode_default === 'true' ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Tampilkan Statistik ke User</p>
+                  <p className="text-[10px] text-slate-500">Izinkan akun 'user' melihat ringkasan kas.</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, show_stats_to_user: formData.show_stats_to_user === 'true' ? 'false' : 'true'})}
+                  className={`w-12 h-6 rounded-full transition-all relative ${formData.show_stats_to_user === 'true' ? 'bg-primary' : 'bg-slate-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.show_stats_to_user === 'true' ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Backup & Restore */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
+              <Database size={14} /> Database & Keamanan
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-700">
+              <div className="flex flex-col md:flex-row items-center gap-8">
+                <div className="flex-1 text-center md:text-left">
+                  <h4 className="font-bold text-slate-800 dark:text-white mb-2">Backup & Restore Data</h4>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Amankan data Anda secara berkala. Anda dapat mengunduh file database atau mengembalikannya dari file backup sebelumnya.</p>
+                </div>
+                <div className="flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={handleBackup}
+                    disabled={backupLoading}
+                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    <Download size={18} /> Backup
+                  </button>
+                  <label className="bg-primary text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 cursor-pointer">
+                    <Upload size={18} /> {restoreLoading ? 'Restoring...' : 'Restore'}
+                    <input type="file" accept=".db" className="hidden" onChange={handleRestore} disabled={restoreLoading} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="pt-6 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <AnimatePresence>
               {success && (
-                <motion.div 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="flex items-center gap-2 text-emerald-600 font-bold text-sm"
-                >
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex items-center gap-2 text-emerald-600 font-bold text-sm">
                   <CheckCircle2 size={18} /> Pengaturan berhasil disimpan!
                 </motion.div>
               )}
@@ -1750,11 +2051,16 @@ const Ronda = ({ role }: { role: string }) => {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [darkMode, setDarkMode] = useState(false);
   const [settings, setSettings] = useState<AppSettings>({
     app_name: 'Merpati Lima',
     app_logo: '',
     invoice_header: 'Informasi Penting',
-    invoice_footer: 'Terima kasih atas partisipasi Anda.'
+    invoice_footer: 'Terima kasih atas partisipasi Anda.',
+    marquee_enabled: 'false',
+    marquee_text: '',
+    dark_mode_default: 'false',
+    show_stats_to_user: 'true'
   });
   const [stats, setStats] = useState<Stats>({
     totalWarga: 0,
@@ -1767,6 +2073,11 @@ export default function App() {
     const res = await fetch('/api/settings');
     const data = await res.json();
     setSettings(data);
+    
+    // Apply dark mode default if not set by user preference
+    if (data.dark_mode_default === 'true' && !localStorage.getItem('theme')) {
+      setDarkMode(true);
+    }
   };
 
   const fetchStats = async () => {
@@ -1777,7 +2088,19 @@ export default function App() {
 
   useEffect(() => {
     fetchSettings();
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') setDarkMode(true);
   }, []);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
 
   useEffect(() => {
     if (user) fetchStats();
@@ -1815,18 +2138,21 @@ export default function App() {
   const filteredMenuItems = menuItems.filter(item => !item.adminOnly || user.role === 'admin');
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className={`min-h-screen flex ${darkMode ? 'bg-slate-900' : 'bg-slate-50'} transition-colors duration-300`}>
       {/* Sidebar */}
-      <aside className="hidden lg:flex flex-col w-72 bg-white border-r border-slate-100 p-6">
+      <aside 
+        className="hidden lg:flex flex-col w-72 border-r border-slate-100 dark:border-slate-700 p-6 transition-colors"
+        style={{ backgroundColor: darkMode ? undefined : settings.primary_color }}
+      >
         <div className="flex items-center gap-3 mb-10 px-2">
           {settings.app_logo ? (
-            <img src={settings.app_logo} alt="Logo" className="w-10 h-10 object-contain rounded-xl shadow-md" />
+            <img src={settings.app_logo} alt="Logo" className="w-10 h-10 object-contain rounded-xl shadow-md bg-white p-1" />
           ) : (
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-lg">
               <Users size={20} />
             </div>
           )}
-          <h1 className="text-xl font-bold text-slate-800 truncate">{settings.app_name}</h1>
+          <h1 className={`text-xl font-bold truncate ${darkMode ? 'text-white' : 'text-white'}`}>{settings.app_name}</h1>
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -1836,30 +2162,44 @@ export default function App() {
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold transition-all ${
                 activeTab === item.id 
-                  ? 'bg-primary/10 text-primary' 
-                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                  ? (darkMode ? 'bg-primary/10 text-primary' : 'bg-white/20 text-white') 
+                  : (darkMode ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50' : 'text-white/60 hover:text-white hover:bg-white/10')
               }`}
             >
               <item.icon size={20} />
               {item.label}
-              {activeTab === item.id && <motion.div layoutId="active" className="ml-auto w-1.5 h-1.5 bg-primary rounded-full" />}
+              {activeTab === item.id && <motion.div layoutId="active" className={`ml-auto w-1.5 h-1.5 rounded-full ${darkMode ? 'bg-primary' : 'bg-white'}`} />}
             </button>
           ))}
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-2 mb-6">
-            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold">
+        <div className={`mt-auto pt-6 border-t space-y-4 ${darkMode ? 'border-slate-700' : 'border-white/20'}`}>
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold transition-all ${
+              darkMode ? 'text-slate-400 hover:bg-slate-700/50' : 'text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            {darkMode ? 'Mode Terang' : 'Mode Gelap'}
+          </button>
+
+          <div className="flex items-center gap-3 px-2 mb-2">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+              darkMode ? 'bg-slate-700 text-slate-300' : 'bg-white/20 text-white'
+            }`}>
               {user.username[0].toUpperCase()}
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-800">{user.username}</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user.role}</p>
+              <p className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-white'}`}>{user.username}</p>
+              <p className={`text-[10px] font-bold uppercase tracking-widest ${darkMode ? 'text-slate-500' : 'text-white/50'}`}>{user.role}</p>
             </div>
           </div>
           <button 
             onClick={() => setUser(null)}
-            className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold text-rose-500 hover:bg-rose-50 transition-all"
+            className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold transition-all ${
+              darkMode ? 'text-rose-500 hover:bg-rose-900/20' : 'text-white hover:bg-white/10'
+            }`}
           >
             <LogOut size={20} />
             Keluar
@@ -1869,24 +2209,38 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
+        {/* Marquee */}
+        {settings.marquee_enabled === 'true' && settings.marquee_text && (
+          <Marquee text={settings.marquee_text} color={settings.primary_color || '#4f46e5'} />
+        )}
+
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 p-6 sticky top-0 z-30">
+        <header 
+          className="backdrop-blur-md border-b p-6 sticky top-0 z-30 transition-colors"
+          style={{ 
+            backgroundColor: darkMode ? 'rgba(30, 41, 59, 0.8)' : settings.primary_color,
+            borderColor: darkMode ? 'rgba(51, 65, 85, 1)' : 'rgba(255, 255, 255, 0.1)'
+          }}
+        >
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">
+              <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-white'}`}>
                 {menuItems.find(m => m.id === activeTab)?.label}
               </h2>
-              <p className="text-sm text-slate-400">Selamat datang kembali, {user.username}!</p>
+              <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-white/70'}`}>Selamat datang kembali, {user.username}!</p>
             </div>
             
             {/* Mobile Menu Toggle (simplified) */}
-            <div className="lg:hidden flex gap-4">
+            <div className="lg:hidden flex gap-2">
+              <button onClick={() => setDarkMode(!darkMode)} className={`p-2 ${darkMode ? 'text-slate-400' : 'text-white/70'}`}>
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
               {filteredMenuItems.map(m => (
-                <button key={m.id} onClick={() => setActiveTab(m.id)} className={`p-2 rounded-xl ${activeTab === m.id ? 'bg-primary/10 text-primary' : 'text-slate-400'}`}>
+                <button key={m.id} onClick={() => setActiveTab(m.id)} className={`p-2 rounded-xl ${activeTab === m.id ? 'bg-white/20 text-white' : (darkMode ? 'text-slate-500' : 'text-white/60')}`}>
                   <m.icon size={20} />
                 </button>
               ))}
-              <button onClick={() => setUser(null)} className="p-2 text-rose-500"><LogOut size={20} /></button>
+              <button onClick={() => setUser(null)} className={`p-2 ${darkMode ? 'text-rose-500' : 'text-white'}`}><LogOut size={20} /></button>
             </div>
           </div>
         </header>
@@ -1901,7 +2255,7 @@ export default function App() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <Dashboard stats={stats} />}
+              {activeTab === 'dashboard' && <Dashboard stats={stats} user={user} settings={settings} />}
               {activeTab === 'warga' && <WargaList role={user.role} onUpdate={fetchStats} />}
               {activeTab === 'keuangan' && <KeuanganList role={user.role} onUpdate={fetchStats} />}
               {activeTab === 'tagihan' && <TagihanList role={user.role} settings={settings} />}

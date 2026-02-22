@@ -2,6 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -94,10 +95,14 @@ insertRondaGroup.run(4, "Group 4");
 const insertSetting = db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)");
 insertSetting.run("app_name", "Merpati Lima");
 insertSetting.run("app_logo", "");
-insertSetting.run("gang_logo", ""); // New gang logo setting
-insertSetting.run("primary_color", "#4f46e5"); // Default indigo-600
+insertSetting.run("gang_logo", "");
+insertSetting.run("primary_color", "#4f46e5");
 insertSetting.run("invoice_header", "Informasi Penting");
 insertSetting.run("invoice_footer", "Terima kasih atas partisipasi Anda.");
+insertSetting.run("marquee_text", "Selamat Datang di Sistem Informasi Warga Merpati Lima. Jaga Kebersihan dan Keamanan Lingkungan Kita.");
+insertSetting.run("marquee_enabled", "true");
+insertSetting.run("dark_mode_default", "false");
+insertSetting.run("show_stats_to_user", "true");
 
 // Insert default users if not exists
 const insertUser = db.prepare("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)");
@@ -204,7 +209,11 @@ async function startServer() {
   });
 
   app.post("/api/settings", (req, res) => {
-    const { app_name, app_logo, gang_logo, primary_color, invoice_header, invoice_footer } = req.body;
+    const { 
+      app_name, app_logo, gang_logo, primary_color, 
+      invoice_header, invoice_footer, 
+      marquee_text, marquee_enabled, dark_mode_default, show_stats_to_user 
+    } = req.body;
     try {
       if (app_name !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'app_name'").run(app_name);
       if (app_logo !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'app_logo'").run(app_logo);
@@ -212,6 +221,10 @@ async function startServer() {
       if (primary_color !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'primary_color'").run(primary_color);
       if (invoice_header !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'invoice_header'").run(invoice_header);
       if (invoice_footer !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'invoice_footer'").run(invoice_footer);
+      if (marquee_text !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'marquee_text'").run(marquee_text);
+      if (marquee_enabled !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'marquee_enabled'").run(String(marquee_enabled));
+      if (dark_mode_default !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'dark_mode_default'").run(String(dark_mode_default));
+      if (show_stats_to_user !== undefined) db.prepare("UPDATE settings SET value = ? WHERE key = 'show_stats_to_user'").run(String(show_stats_to_user));
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ success: false, message: err.message });
@@ -368,6 +381,27 @@ async function startServer() {
     const { warga_id } = req.params;
     db.prepare("DELETE FROM ronda_members WHERE warga_id = ?").run(warga_id);
     res.json({ success: true });
+  });
+
+  // Backup & Restore API
+  app.get("/api/database/backup", (req, res) => {
+    const dbPath = path.join(__dirname, "warga_manager.db");
+    res.download(dbPath, `backup_merpati5_${new Date().toISOString().split('T')[0]}.db`);
+  });
+
+  // Note: Restore is complex because we need to close the DB connection.
+  // We'll use a simple approach: accept the file, but the user might need to restart.
+  // In a real cPanel env, replacing the file might trigger a restart anyway.
+  app.post("/api/database/restore", express.raw({ type: 'application/octet-stream', limit: '50mb' }), (req, res) => {
+    try {
+      db.close();
+      fs.writeFileSync(path.join(__dirname, "warga_manager.db"), req.body);
+      res.json({ success: true });
+      // Force restart, the process manager (PM2/cPanel) will bring it back
+      setTimeout(() => process.exit(0), 1000);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
   });
 
   // Vite middleware for development
