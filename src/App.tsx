@@ -87,6 +87,12 @@ interface AppSettings {
   marquee_enabled: string;
   dark_mode_default: string;
   show_stats_to_user: string;
+  invoice_title: string;
+  invoice_signature_name: string;
+  invoice_signature_role: string;
+  invoice_notes: string;
+  invoice_show_logo: string;
+  invoice_show_gang_logo: string;
 }
 
 interface Tagihan {
@@ -941,6 +947,7 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showInvoice, setShowInvoice] = useState<Tagihan | null>(null);
   const [schedules, setSchedules] = useState<BillingSchedule[]>([]);
+  const [editingSchedule, setEditingSchedule] = useState<BillingSchedule | null>(null);
   const [formData, setFormData] = useState({
     warga_id: '',
     nomor_tagihan: `INV/${new Date().getFullYear()}/${Math.floor(Math.random() * 10000)}`,
@@ -1003,13 +1010,17 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/billing-schedules', {
-      method: 'POST',
+    const url = editingSchedule ? `/api/billing-schedules/${editingSchedule.id}` : '/api/billing-schedules';
+    const method = editingSchedule ? 'PUT' : 'POST';
+    
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(scheduleForm),
     });
     if (res.ok) {
       setScheduleForm({ nama: '', hari_tagihan: 1, jumlah: '', deskripsi: '' });
+      setEditingSchedule(null);
       fetchSchedules();
     }
   };
@@ -1243,6 +1254,26 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                     ))}
                   </select>
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Gunakan Template (Jenis Tagihan)</label>
+                  <select 
+                    className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary"
+                    onChange={(e) => {
+                      const schedule = schedules.find(s => s.id === parseInt(e.target.value));
+                      if (schedule) {
+                        setFormData({
+                          ...formData,
+                          items: [{ deskripsi: schedule.nama, jumlah: schedule.jumlah.toString() }]
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">Pilih Template</option>
+                    {schedules.map(s => (
+                      <option key={s.id} value={s.id}>{s.nama} - Rp {s.jumlah.toLocaleString('id-ID')}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Nomor Tagihan</label>
                   <input 
@@ -1356,7 +1387,9 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
             </div>
             <div className="p-6 overflow-y-auto space-y-8">
               <form onSubmit={handleScheduleSubmit} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
-                <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Tambah Jadwal Baru</h4>
+                <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wider">
+                  {editingSchedule ? 'Edit Jenis Tagihan' : 'Tambah Jenis Tagihan Baru'}
+                </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Nama Tagihan</label>
@@ -1400,13 +1433,27 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                     />
                   </div>
                 </div>
-                <button type="submit" className="w-full bg-primary text-white py-2 rounded-xl font-bold text-sm shadow-md">
-                  Simpan Jadwal
-                </button>
+                <div className="flex gap-2">
+                  <button type="submit" className="flex-1 bg-primary text-white py-2 rounded-xl font-bold text-sm shadow-md">
+                    {editingSchedule ? 'Update Jenis Tagihan' : 'Simpan Jenis Tagihan'}
+                  </button>
+                  {editingSchedule && (
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setEditingSchedule(null);
+                        setScheduleForm({ nama: '', hari_tagihan: 1, jumlah: '', deskripsi: '' });
+                      }}
+                      className="px-4 bg-slate-200 text-slate-600 py-2 rounded-xl font-bold text-sm"
+                    >
+                      Batal
+                    </button>
+                  )}
+                </div>
               </form>
 
               <div className="space-y-4">
-                <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Jadwal Aktif</h4>
+                <h4 className="font-bold text-slate-700 text-sm uppercase tracking-wider">Daftar Jenis Tagihan</h4>
                 <div className="grid grid-cols-1 gap-3">
                   {schedules.map(s => (
                     <div key={s.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
@@ -1414,12 +1461,28 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                         <p className="font-bold text-slate-800">{s.nama}</p>
                         <p className="text-xs text-slate-500">Setiap tanggal {s.hari_tagihan} • Rp {s.jumlah.toLocaleString('id-ID')}</p>
                       </div>
-                      <button onClick={() => deleteSchedule(s.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg">
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setEditingSchedule(s);
+                            setScheduleForm({
+                              nama: s.nama,
+                              hari_tagihan: s.hari_tagihan,
+                              jumlah: s.jumlah.toString(),
+                              deskripsi: s.deskripsi
+                            });
+                          }} 
+                          className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => deleteSchedule(s.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))}
-                  {schedules.length === 0 && <p className="text-center text-slate-400 text-sm py-8 italic">Belum ada jadwal tagihan otomatis.</p>}
+                  {schedules.length === 0 && <p className="text-center text-slate-400 text-sm py-8 italic">Belum ada jenis tagihan.</p>}
                 </div>
               </div>
             </div>
@@ -1455,18 +1518,20 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                 <div className="flex justify-between items-start mb-12">
                   <div>
                   <div className="flex items-center gap-8">
-                    <div className="flex flex-col items-center">
-                      {settings.app_logo ? (
-                        <img src={settings.app_logo} alt="Logo" className="w-24 h-24 object-contain mb-2" />
-                      ) : (
-                        <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white mb-2">
-                          <Users size={32} />
-                        </div>
-                      )}
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Logo Aplikasi</p>
-                    </div>
+                    {settings.invoice_show_logo === 'true' && (
+                      <div className="flex flex-col items-center">
+                        {settings.app_logo ? (
+                          <img src={settings.app_logo} alt="Logo" className="w-24 h-24 object-contain mb-2" />
+                        ) : (
+                          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white mb-2">
+                            <Users size={32} />
+                          </div>
+                        )}
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Logo Aplikasi</p>
+                      </div>
+                    )}
                     
-                    {settings.gang_logo && (
+                    {settings.invoice_show_gang_logo === 'true' && settings.gang_logo && (
                       <div className="flex flex-col items-center">
                         <img src={settings.gang_logo} alt="Logo Gang" className="w-24 h-24 object-contain mb-2" />
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Logo Gang</p>
@@ -1479,7 +1544,7 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                   </div>
                   </div>
                   <div className="text-right">
-                    <h1 className="text-4xl font-black text-slate-200 uppercase tracking-tighter mb-2">INVOICE</h1>
+                    <h1 className="text-4xl font-black text-slate-200 uppercase tracking-tighter mb-2">{settings.invoice_title || 'INVOICE'}</h1>
                     <p className="text-primary font-bold text-lg">{showInvoice.nomor_tagihan}</p>
                     <p className="text-slate-400 text-sm">Tanggal: {showInvoice.tanggal}</p>
                   </div>
@@ -1527,6 +1592,13 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                   </table>
                 </div>
 
+                {settings.invoice_notes && (
+                  <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Catatan:</h4>
+                    <p className="text-sm text-slate-600">{settings.invoice_notes}</p>
+                  </div>
+                )}
+
                 <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100">
                   <p className="text-slate-600 italic text-center text-sm">"{settings.invoice_footer}"</p>
                 </div>
@@ -1538,7 +1610,8 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                   </div>
                   <div className="text-center">
                     <div className="w-32 h-32 border border-slate-100 rounded-2xl mb-2 mx-auto flex items-center justify-center text-[10px] text-slate-200 uppercase font-bold">Cap / Tanda Tangan</div>
-                    <p className="text-xs font-bold text-slate-400">Bendahara RT</p>
+                    <p className="text-sm font-bold text-slate-800">{settings.invoice_signature_name || 'Bendahara'}</p>
+                    <p className="text-xs font-bold text-slate-400">{settings.invoice_signature_role || 'Bendahara RT'}</p>
                   </div>
                 </div>
               </div>
@@ -1862,6 +1935,102 @@ const Settings = ({ settings, onUpdate }: { settings: AppSettings, onUpdate: () 
             </div>
           </section>
 
+          {/* Kostumasi Template Tagihan */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
+              <FileText size={14} /> Kostumasi Template Tagihan
+            </div>
+            <div className="bg-white dark:bg-slate-800 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Judul Invoice</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      value={formData.invoice_title}
+                      onChange={(e) => setFormData({...formData, invoice_title: e.target.value})}
+                      placeholder="e.g. INVOICE, TAGIHAN IURAN"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Header Invoice (Alamat/Sub-judul)</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      value={formData.invoice_header}
+                      onChange={(e) => setFormData({...formData, invoice_header: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Nama Penandatangan</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      value={formData.invoice_signature_name}
+                      onChange={(e) => setFormData({...formData, invoice_signature_name: e.target.value})}
+                      placeholder="e.g. Budi Santoso"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Jabatan Penandatangan</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      value={formData.invoice_signature_role}
+                      onChange={(e) => setFormData({...formData, invoice_signature_role: e.target.value})}
+                      placeholder="e.g. Bendahara RT 05"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Catatan Tambahan (Notes)</label>
+                    <textarea 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      rows={3}
+                      value={formData.invoice_notes}
+                      onChange={(e) => setFormData({...formData, invoice_notes: e.target.value})}
+                      placeholder="e.g. Pembayaran via transfer ke rek BCA 123456..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Footer Invoice (Pesan Penutup)</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-primary transition-all"
+                      value={formData.invoice_footer}
+                      onChange={(e) => setFormData({...formData, invoice_footer: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Tampilkan Logo Aplikasi</label>
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({...formData, invoice_show_logo: formData.invoice_show_logo === 'true' ? 'false' : 'true'})}
+                        className={`w-12 h-6 rounded-full transition-all relative ${formData.invoice_show_logo === 'true' ? 'bg-primary' : 'bg-slate-300'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.invoice_show_logo === 'true' ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Tampilkan Logo Gang</label>
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({...formData, invoice_show_gang_logo: formData.invoice_show_gang_logo === 'true' ? 'false' : 'true'})}
+                        className={`w-12 h-6 rounded-full transition-all relative ${formData.invoice_show_gang_logo === 'true' ? 'bg-primary' : 'bg-slate-300'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${formData.invoice_show_gang_logo === 'true' ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Backup & Restore */}
           <section className="space-y-6">
             <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-widest text-xs">
@@ -2124,12 +2293,20 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>({
     app_name: 'Merpati Lima',
     app_logo: '',
+    gang_logo: '',
+    primary_color: '#4f46e5',
     invoice_header: 'Informasi Penting',
     invoice_footer: 'Terima kasih atas partisipasi Anda.',
     marquee_enabled: 'false',
     marquee_text: '',
     dark_mode_default: 'false',
-    show_stats_to_user: 'true'
+    show_stats_to_user: 'true',
+    invoice_title: 'INVOICE',
+    invoice_signature_name: 'Bendahara',
+    invoice_signature_role: 'Bendahara RT',
+    invoice_notes: '',
+    invoice_show_logo: 'true',
+    invoice_show_gang_logo: 'true'
   });
   const [stats, setStats] = useState<Stats>({
     totalWarga: 0,

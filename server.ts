@@ -67,7 +67,9 @@ db.exec(`
     nama TEXT NOT NULL,
     hari_tagihan INTEGER NOT NULL, -- 1-31
     jumlah REAL NOT NULL,
-    deskripsi TEXT
+    deskripsi TEXT,
+    kategori TEXT DEFAULT 'Iuran Wajib',
+    is_active INTEGER DEFAULT 1 -- 0 for inactive, 1 for active
   );
 
   CREATE TABLE IF NOT EXISTS ronda_groups (
@@ -306,8 +308,9 @@ async function startServer() {
   });
 
   app.post("/api/billing-schedules", (req, res) => {
-    const { nama, hari_tagihan, jumlah, deskripsi } = req.body;
-    const result = db.prepare("INSERT INTO billing_schedules (nama, hari_tagihan, jumlah, deskripsi) VALUES (?, ?, ?, ?)").run(nama, hari_tagihan, jumlah, deskripsi);
+    const { nama, hari_tagihan, jumlah, deskripsi, kategori, is_active } = req.body;
+    const result = db.prepare("INSERT INTO billing_schedules (nama, hari_tagihan, jumlah, deskripsi, kategori, is_active) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(nama, hari_tagihan, jumlah, deskripsi, kategori || 'Iuran Wajib', is_active !== undefined ? is_active : 1);
     res.json({ success: true, id: result.lastInsertRowid });
   });
 
@@ -317,9 +320,21 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.put("/api/billing-schedules/:id", (req, res) => {
+    const { id } = req.params;
+    const { nama, hari_tagihan, jumlah, deskripsi, kategori, is_active } = req.body;
+    try {
+      db.prepare("UPDATE billing_schedules SET nama = ?, hari_tagihan = ?, jumlah = ?, deskripsi = ?, kategori = ?, is_active = ? WHERE id = ?")
+        .run(nama, hari_tagihan, jumlah, deskripsi, kategori, is_active, id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
   app.post("/api/tagihan/generate-monthly", (req, res) => {
     const { month, year } = req.body; // e.g., 2, 2026
-    const schedules = db.prepare("SELECT * FROM billing_schedules").all() as any[];
+    const schedules = db.prepare("SELECT * FROM billing_schedules WHERE is_active = 1").all() as any[];
     const warga = db.prepare("SELECT id FROM warga").all() as any[];
     
     const transaction = db.transaction(() => {
