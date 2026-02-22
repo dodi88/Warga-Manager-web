@@ -960,7 +960,9 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
     nama: '',
     hari_tagihan: 1,
     jumlah: '',
-    deskripsi: ''
+    deskripsi: '',
+    kategori: 'Iuran Wajib',
+    is_active: 1
   });
 
   const fetchTagihan = async () => {
@@ -1019,7 +1021,7 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
       body: JSON.stringify(scheduleForm),
     });
     if (res.ok) {
-      setScheduleForm({ nama: '', hari_tagihan: 1, jumlah: '', deskripsi: '' });
+      setScheduleForm({ nama: '', hari_tagihan: 1, jumlah: '', deskripsi: '', kategori: 'Iuran Wajib', is_active: 1 });
       setEditingSchedule(null);
       fetchSchedules();
     }
@@ -1397,10 +1399,24 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                       type="text" 
                       required
                       placeholder="e.g. Iuran Kebersihan"
-                      className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary text-sm"
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary text-sm"
                       value={scheduleForm.nama}
                       onChange={(e) => setScheduleForm({...scheduleForm, nama: e.target.value})}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Kategori</label>
+                    <select 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary text-sm"
+                      value={scheduleForm.kategori}
+                      onChange={(e) => setScheduleForm({...scheduleForm, kategori: e.target.value})}
+                    >
+                      <option>Iuran Wajib</option>
+                      <option>Iuran Sukarela</option>
+                      <option>Iuran Keamanan</option>
+                      <option>Iuran Kebersihan</option>
+                      <option>Lain-lain</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Hari Tagihan (1-31)</label>
@@ -1408,7 +1424,7 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                       type="number" 
                       min="1" max="31"
                       required
-                      className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary text-sm"
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary text-sm"
                       value={scheduleForm.hari_tagihan}
                       onChange={(e) => setScheduleForm({...scheduleForm, hari_tagihan: parseInt(e.target.value)})}
                     />
@@ -1418,19 +1434,29 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                     <input 
                       type="number" 
                       required
-                      className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary text-sm"
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary text-sm"
                       value={scheduleForm.jumlah}
                       onChange={(e) => setScheduleForm({...scheduleForm, jumlah: e.target.value})}
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Deskripsi</label>
                     <input 
                       type="text" 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary text-sm"
+                      className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary text-sm"
                       value={scheduleForm.deskripsi}
                       onChange={(e) => setScheduleForm({...scheduleForm, deskripsi: e.target.value})}
                     />
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setScheduleForm({...scheduleForm, is_active: scheduleForm.is_active === 1 ? 0 : 1})}
+                      className={`w-10 h-5 rounded-full transition-all relative ${scheduleForm.is_active === 1 ? 'bg-primary' : 'bg-slate-300'}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${scheduleForm.is_active === 1 ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Status Aktif (Generate Otomatis)</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -1469,7 +1495,9 @@ const TagihanList = ({ role, settings }: { role: string, settings: AppSettings }
                               nama: s.nama,
                               hari_tagihan: s.hari_tagihan,
                               jumlah: s.jumlah.toString(),
-                              deskripsi: s.deskripsi
+                              deskripsi: s.deskripsi,
+                              kategori: s.kategori || 'Iuran Wajib',
+                              is_active: s.is_active
                             });
                           }} 
                           className="p-2 text-slate-400 hover:bg-slate-50 rounded-lg"
