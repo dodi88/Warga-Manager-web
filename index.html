@@ -1,35 +1,77 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Warga Manager</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#317EFB">
-    <meta name="description" content="Warga Manager PWA Application">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('service-worker.js')
-                .then(function(registration) {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, function(err) {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-            });
-        }
-    </script>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1 class="mt-5">Welcome to Warga Manager!</h1>
+    <nav class="navbar">
+        <h1>Warga Manager</h1>
+        <ul>
+            <li><a href="#">Home</a></li>
+            <li><a href="#">Residents</a></li>
+            <li><a href="#">Finance</a></li>
+            <li><a href="#">Login</a></li>
+        </ul>
+    </nav>
+    <div class="sidebar">
+        <h2>Dashboard</h2>
+        <ul>
+            <li><a href="#">Statistics</a></li>
+            <li><a href="#">Manage Residents</a></li>
+            <li><a href="#">Finance Management</a></li>
+        </ul>
     </div>
-
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <div class="content">
+        <section class="login-page">
+            <h2>Login</h2>
+            <form>
+                <label for="username">Username:</label>
+                <input type="text" id="username" required>
+                <label for="password">Password:</label>
+                <input type="password" id="password" required>
+                <button type="submit">Login</button>
+            </form>
+        </section>
+        <section class="dashboard">
+            <h2>Dashboard</h2>
+            <div class="statistics">
+                <h3>Statistics</h3>
+                <p>Total Residents: <span id="total-residents">100</span></p>
+                <p>Total Income: <span id="total-income">$50000</span></p>
+                <p>Total Expenses: <span id="total-expenses">$30000</span></p>
+            </div>
+            <div class="charts">
+                <h3>Charts</h3>
+                <!-- Charts go here -->
+            </div>
+        </section>
+        <section class="residents-management">
+            <h2>Residents Management</h2>
+            <button id="add-resident">Add Resident</button>
+            <div id="residents-list">
+                <!-- List of residents go here -->
+            </div>
+        </section>
+        <section class="finance-management">
+            <h2>Finance Management</h2>
+            <div>
+                <h3>Income Tracking</h3>
+                <button id="add-income">Add Income</button>
+                <!-- Income tracking list goes here -->
+            </div>
+            <div>
+                <h3>Expense Tracking</h3>
+                <button id="add-expense">Add Expense</button>
+                <!-- Expense tracking list goes here -->
+            </div>
+        </section>
+    </div>
+    <footer>
+        <p>&copy; 2026 Warga Manager. All rights reserved.</p>
+    </footer>
+    <script src="script.js"></script>
 </body>
 </html>
